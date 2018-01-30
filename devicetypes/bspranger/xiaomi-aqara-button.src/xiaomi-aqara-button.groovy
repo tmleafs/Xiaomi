@@ -59,13 +59,12 @@ metadata {
         capability "Actuator"
         capability "Switch"
         capability "Momentary"
-        capability "Refresh"
         capability "Battery"
         capability "Health Check"
 
         attribute "lastCheckin", "string"
-        attribute "lastPress", "string"
-        attribute "lastpressedDate", "Date"
+        attribute "lastpressed", "string"
+        attribute "lastpressedDate", "string"
         attribute "lastCheckinDate", "Date"
         attribute "batteryRuntime", "String"
 
@@ -82,8 +81,8 @@ metadata {
     tiles(scale: 2) {
         multiAttributeTile(name:"button", type:"lighting", width: 6, height: 4, canChangeIcon: true) {
             tileAttribute("device.button", key: "PRIMARY_CONTROL") {
-                attributeState "pushed", label:'${name}', action: "momentary.push", backgroundColor:"#00a0dc"
-                attributeState "released", label:'${name}', action: "momentary.push", backgroundColor:"#ffffff"
+                attributeState "pushed", label:'Push', action: "momentary.push", backgroundColor:"#00a0dc"
+                attributeState "released", label:'Push', action: "momentary.push", backgroundColor:"#ffffff", nextState: "pushed"
             }
             tileAttribute("device.lastpressed", key: "SECONDARY_CONTROL") {
                 attributeState "default", label:'Last Pressed: ${currentValue}'
@@ -103,25 +102,22 @@ metadata {
         valueTile("lastcheckin", "device.lastCheckin", decoration:"flat", inactiveLabel: false, width: 4, height: 1) {
             state "default", label:'Last Checkin:\n${currentValue}'
         }
-        standardTile("refresh", "device.refresh", decoration:"flat", inactiveLabel: false, width: 2, height: 2) {
-            state "default", action:"refresh.refresh", icon:"st.secondary.refresh"
-        }
         valueTile("batteryRuntime", "device.batteryRuntime", decoration:"flat", inactiveLabel: false, width: 4, height: 1) {
             state "batteryRuntime", label:'Battery Changed (tap to reset):\n ${currentValue}', unit:"", action:"resetBatteryRuntime"
         }
 
         main (["button"])
-        details(["button","battery","empty2x2","empty2x2","lastcheckin","batteryRuntime","refresh"])
+        details(["button","battery","empty2x2","empty2x2","lastcheckin","batteryRuntime"])
    }
 }
 
 //adds functionality to press the centre tile as a virtualApp Button
 def push() {
 	log.debug "Virtual App Button Pressed"
-	sendEvent(name: "button", value: "on", isStateChange: true, displayed: false)
-	sendEvent(name: "button", value: "off", isStateChange: true, displayed: false)
-	sendEvent(name: "momentary", value: "pushed", isStateChange: true)
+	sendEvent(name: "lastpressed", value: now, displayed: false)
+        sendEvent(name: "lastpressedDate", value: nowDate, displayed: false) 
 	sendEvent(name: "button", value: "pushed", data: [buttonNumber: 1], descriptionText: "$device.displayName app button was pushed", isStateChange: true)
+	sendEvent(name: "button", value: "released", data: [buttonNumber: 1], descriptionText: "$device.displayName app button was released", isStateChange: true)
 }
 
 def parse(String description) {
@@ -247,11 +243,6 @@ private Map getBatteryResult(rawValue) {
     ]
 
     log.debug "${device.displayName}: ${result}"
-    if (state.battery != result.value)
-    {
-        state.battery = result.value
-        resetBatteryRuntime()
-    }
     return createEvent(result)
 }
 
@@ -312,18 +303,12 @@ def resetBatteryRuntime() {
     sendEvent(name: "batteryRuntime", value: now)
 }
 
-def refresh(){
-    log.debug "${device.displayName}: refreshing"
-    checkIntervalEvent("refresh");
-    return zigbee.configureReporting(0x0006, 0x0000, 0x10, 0, 600, null)
-}
-
 def configure() {
     log.debug "${device.displayName}: configuring"
     state.battery = 0
     state.button = "released"
     checkIntervalEvent("configure");
-    return zigbee.configureReporting(0x0006, 0x0000, 0x10, 0, 600, null)
+    return
 }
 
 def installed() {
@@ -334,7 +319,7 @@ def installed() {
 
 def updated() {
     checkIntervalEvent("updated");
-    return zigbee.configureReporting(0x0006, 0x0000, 0x10, 0, 600, null)
+    return 
 }
 
 private checkIntervalEvent(text) {
@@ -344,22 +329,32 @@ private checkIntervalEvent(text) {
 }
 
 def formatDate(batteryReset) {
+    def correctedTimezone = ""
+
+    if (!(location.timeZone)) {
+        correctedTimezone = TimeZone.getTimeZone("GMT")
+        log.error "${device.displayName}: Time Zone not set, so GMT was used. Please set up your location in the SmartThings mobile app."
+        sendEvent(name: "error", value: "", descriptionText: "ERROR: Time Zone not set, so GMT was used. Please set up your location in the SmartThings mobile app.")
+    } 
+    else {
+        correctedTimezone = location.timeZone
+    }
     if (dateformat == "US" || dateformat == "" || dateformat == null) {
         if (batteryReset)
-            return new Date().format("MMM dd yyyy", location.timeZone)
+            return new Date().format("MMM dd yyyy", correctedTimezone)
         else
-            return new Date().format("EEE MMM dd yyyy h:mm:ss a", location.timeZone)
+            return new Date().format("EEE MMM dd yyyy h:mm:ss a", correctedTimezone)
     }
     else if (dateformat == "UK") {
         if (batteryReset)
-            return new Date().format("dd MMM yyyy", location.timeZone)
+            return new Date().format("dd MMM yyyy", correctedTimezone)
         else
-            return new Date().format("EEE dd MMM yyyy h:mm:ss a", location.timeZone)
+            return new Date().format("EEE dd MMM yyyy h:mm:ss a", correctedTimezone)
         }
     else {
         if (batteryReset)
-            return new Date().format("yyyy MMM dd", location.timeZone)
+            return new Date().format("yyyy MMM dd", correctedTimezone)
         else
-            return new Date().format("EEE yyyy MMM dd h:mm:ss a", location.timeZone)
+            return new Date().format("EEE yyyy MMM dd h:mm:ss a", correctedTimezone)
     }
 }

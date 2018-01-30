@@ -32,7 +32,6 @@ metadata {
         capability "Relative Humidity Measurement"
         capability "Sensor"
         capability "Battery"
-        capability "Refresh"
         capability "Health Check"
         
         attribute "lastCheckin", "String"
@@ -58,7 +57,11 @@ metadata {
     preferences {
         section {
             input title: "Temperature Offset", description: "This feature allows you to correct any temperature variations by selecting an offset. Ex: If your sensor consistently reports a temp that's 5 degrees too warm, you'd enter '-5'. If 3 degrees too cold, enter '+3'. Please note, any changes will take effect only on the NEXT temperature change.", displayDuringSetup: false, type: "paragraph", element: "paragraph"
-            input "tempOffset", "number", title: "Degrees", description: "Adjust temperature by this many degrees", range: "*..*", displayDuringSetup: true, required: true
+            input "tempOffset", "number", title: "Degrees", description: "Adjust temperature by this many degrees", range: "*..*", displayDuringSetup: true, required: true, defaultValue: 0
+        }
+	section {
+            input title:"Humidity Offset", description:"This feature allows you to correct any humidity variations by selecting an offset. Ex: If your sensor consistently reports a humidity that's 5 too high, you'd enter '-5'. If 3 too low, enter '+3'. Please note, any changes will take effect only on the NEXT humidity change.", displayDuringSetup: true, type: "paragraph", element:"paragraph"
+            input "humidOffset", "number", title:"Humidity", description:"Adjust humidity by this many units", range: "*..*", displayDuringSetup: true, required: true, defaultValue: 0
         }
         section {
 		input name: "dateformat", type: "enum", title: "Set Date Format\n US (MDY) - UK (DMY) - Other (YMD)", description: "Date Format", required: false, options:["US","UK","Other"]
@@ -66,6 +69,7 @@ metadata {
 		input name: "voltsmax", title: "Max Volts\nA battery is at 100% at __ volts\nRange 2.8 to 3.4", type: "decimal", range: "2.8..3.4", defaultValue: 3, required: false
 		input name: "voltsmin", title: "Min Volts\nA battery is at 0% (needs replacing) at __ volts\nRange 2.0 to 2.7", type: "decimal", range: "2..2.7", defaultValue: 2.5, required: false
         }
+	
     }
     
     // UI tile definitions
@@ -126,15 +130,11 @@ metadata {
                     [value: 96, color: "#bc2323"]                                      
                 ]
         }
-
-        standardTile("refresh", "device.refresh", inactiveLabel: false, decoration: "flat", width: 2, height: 2) {
-            state "default", action:"refresh.refresh", icon:"st.secondary.refresh"
-        }
             valueTile("batteryRuntime", "device.batteryRuntime", inactiveLabel: false, decoration: "flat", width: 6, height: 2) {
             state "batteryRuntime", label:'Battery Changed: ${currentValue} - Tap to reset Date', unit:"", action:"resetBatteryRuntime"
     }     
         main(["temperature2"])
-        details(["temperature", "battery", "humidity","refresh","batteryRuntime"])
+        details(["temperature", "battery", "humidity","batteryRuntime"])
     }
 }
 
@@ -204,9 +204,12 @@ private Map parseTemperature(String description){
 
 private Map parseHumidity(String description){
     def pct = (description - "humidity: " - "%").trim()
-        
+
+    if (!(settings.humidOffset)) {
+        settings.humidOffset = 0
+    }
     if (pct.isNumber()) {
-        pct =  Math.round(new BigDecimal(pct))
+        pct =  Math.round(new BigDecimal(pct + settings.humidOffset))
         
         def result = [
             name: 'humidity',
@@ -217,7 +220,6 @@ private Map parseHumidity(String description){
         ]
         return result
     }
-    
     return [:]
 }
 
@@ -319,11 +321,6 @@ private Map getBatteryResult(rawValue) {
     ]
     
     log.debug "${device.displayName}: ${result}"
-    if (state.battery != result.value)
-    {
-        state.battery = result.value
-        resetBatteryRuntime()
-    }
     return result
 }
 
@@ -332,19 +329,10 @@ def resetBatteryRuntime() {
     sendEvent(name: "batteryRuntime", value: now)
 }
 
-def refresh(){
-    log.debug "${device.displayName}: refreshing"
-    checkIntervalEvent("refresh");
-    // temperature minReportTime 1 minute, maxReportTime 15 min., reporting internal if no activity
-    return zigbee.configureReporting(0x0402, 0x0000, 0x29, 60, 900, 0x0064)
-}
-
 def configure() {
     log.debug "${device.displayName}: configure"
     state.battery = 0
     checkIntervalEvent("configure");
-    // temperature minReportTime 1 minute, maxReportTime 15 min., reporting internal if no activity
-    return zigbee.configureReporting(0x0402, 0x0000, 0x29, 60, 900, 0x0064)
 }
 
 def installed() {
@@ -363,22 +351,32 @@ private checkIntervalEvent(text) {
 }
 
 def formatDate(batteryReset) {
+    def correctedTimezone = ""
+
+    if (!(location.timeZone)) {
+        correctedTimezone = TimeZone.getTimeZone("GMT")
+        log.error "${device.displayName}: Time Zone not set, so GMT was used. Please set up your location in the SmartThings mobile app."
+        sendEvent(name: "error", value: "", descriptionText: "ERROR: Time Zone not set, so GMT was used. Please set up your location in the SmartThings mobile app.")
+    } 
+    else {
+        correctedTimezone = location.timeZone
+    }
     if (dateformat == "US" || dateformat == "" || dateformat == null) {
         if (batteryReset)
-            return new Date().format("MMM dd yyyy", location.timeZone)
+            return new Date().format("MMM dd yyyy", correctedTimezone)
         else
-            return new Date().format("EEE MMM dd yyyy h:mm:ss a", location.timeZone)
+            return new Date().format("EEE MMM dd yyyy h:mm:ss a", correctedTimezone)
     }
     else if (dateformat == "UK") {
         if (batteryReset)
-            return new Date().format("dd MMM yyyy", location.timeZone)
+            return new Date().format("dd MMM yyyy", correctedTimezone)
         else
-            return new Date().format("EEE dd MMM yyyy h:mm:ss a", location.timeZone)
+            return new Date().format("EEE dd MMM yyyy h:mm:ss a", correctedTimezone)
         }
     else {
         if (batteryReset)
-            return new Date().format("yyyy MMM dd", location.timeZone)
+            return new Date().format("yyyy MMM dd", correctedTimezone)
         else
-            return new Date().format("EEE yyyy MMM dd h:mm:ss a", location.timeZone)
+            return new Date().format("EEE yyyy MMM dd h:mm:ss a", correctedTimezone)
     }
 }

@@ -33,7 +33,6 @@ metadata {
         capability "Configuration"
         capability "Battery"
         capability "Sensor"
-        capability "Refresh"
         capability "Health Check" 
         
         attribute "lastCheckin", "String"
@@ -45,7 +44,6 @@ metadata {
         
         command "resetBatteryRuntime"	
         command "reset"
-        command "Refresh"
         
     }
 
@@ -87,14 +85,11 @@ metadata {
         valueTile("lastcheckin", "device.lastCheckin", decoration: "flat", inactiveLabel: false, width: 4, height: 1) {
             state "default", label:'Last Checkin:\n ${currentValue}'
         }
-        standardTile("refresh", "device.refresh", inactiveLabel: false, decoration: "flat", width: 2, height: 2) {
-            state "default", action:"refresh.refresh", icon:"st.secondary.refresh"
-        }
         valueTile("batteryRuntime", "device.batteryRuntime", inactiveLabel: false, decoration: "flat", width: 4, height: 1) {
              state "batteryRuntime", label:'Battery Changed (tap to reset):\n ${currentValue}', action:"resetBatteryRuntime"
         }
         main(["motion"])
-        details(["motion", "battery", "empty2x2", "reset", "lastcheckin", "refresh", "batteryRuntime"])
+        details(["motion", "battery", "empty2x2", "reset", "lastcheckin", "batteryRuntime"])
     }
 }
 
@@ -148,11 +143,6 @@ private Map getBatteryResult(rawValue) {
     ]
     
     log.debug "${device.displayName}: ${result}"
-    if (state.battery != result.value)
-    {
-    	state.battery = result.value
-        resetBatteryRuntime()
-    }
     return result
 }
 
@@ -312,11 +302,6 @@ def resetBatteryRuntime() {
     sendEvent(name: "batteryRuntime", value: now)
 }
 
-def refresh(){
-    log.debug "${device.displayName}: refreshing"
-    checkIntervalEvent("refresh");
-}
-
 def configure() {
     log.debug "${device.displayName}: configuring"
     state.battery = 0
@@ -339,22 +324,32 @@ private checkIntervalEvent(text) {
 }
 
 def formatDate(batteryReset) {
+    def correctedTimezone = ""
+
+    if (!(location.timeZone)) {
+        correctedTimezone = TimeZone.getTimeZone("GMT")
+        log.error "${device.displayName}: Time Zone not set, so GMT was used. Please set up your location in the SmartThings mobile app."
+        sendEvent(name: "error", value: "", descriptionText: "ERROR: Time Zone not set, so GMT was used. Please set up your location in the SmartThings mobile app.")
+    } 
+    else {
+        correctedTimezone = location.timeZone
+    }
     if (dateformat == "US" || dateformat == "" || dateformat == null) {
         if (batteryReset)
-            return new Date().format("MMM dd yyyy", location.timeZone)
+            return new Date().format("MMM dd yyyy", correctedTimezone)
         else
-            return new Date().format("EEE MMM dd yyyy h:mm:ss a", location.timeZone)
+            return new Date().format("EEE MMM dd yyyy h:mm:ss a", correctedTimezone)
     }
     else if (dateformat == "UK") {
         if (batteryReset)
-            return new Date().format("dd MMM yyyy", location.timeZone)
+            return new Date().format("dd MMM yyyy", correctedTimezone)
         else
-            return new Date().format("EEE dd MMM yyyy h:mm:ss a", location.timeZone)
+            return new Date().format("EEE dd MMM yyyy h:mm:ss a", correctedTimezone)
         }
     else {
         if (batteryReset)
-            return new Date().format("yyyy MMM dd", location.timeZone)
+            return new Date().format("yyyy MMM dd", correctedTimezone)
         else
-            return new Date().format("EEE yyyy MMM dd h:mm:ss a", location.timeZone)
+            return new Date().format("EEE yyyy MMM dd h:mm:ss a", correctedTimezone)
     }
 }
