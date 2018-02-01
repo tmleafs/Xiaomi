@@ -86,9 +86,9 @@ metadata {
                 attributeState "pushed", label:'Push', action: "momentary.push", backgroundColor:"#00a0dc"
                 attributeState "released", label:'Push', action: "momentary.push", backgroundColor:"#ffffff", nextState: "pushed"
             }
-            tileAttribute("device.lastpressed", key: "SECONDARY_CONTROL") {
-                attributeState "default", label:'Last Pressed: ${currentValue}'
-            }
+            tileAttribute("device.lastCheckin", key: "SECONDARY_CONTROL") {
+                attributeState("default", label:'Last Update: ${currentValue}',icon: "st.Health & Wellness.health9")
+        	}
         }
         valueTile("battery", "device.battery", decoration: "flat", inactiveLabel: false, width: 2, height: 2) {
             state "default", label:'${currentValue}%', unit:"%",
@@ -98,15 +98,15 @@ metadata {
                 [value: 51, color: "#44b621"]
             ]
         }
-        valueTile("lastcheckin", "device.lastCheckin", decoration:"flat", inactiveLabel: false, width: 4, height: 1) {
-            state "default", label:'Last Checkin:\n${currentValue}'
+	valueTile("lastpressed", "device.lastPressed", decoration: "flat", inactiveLabel: false, width: 4, height: 1) {
+            state "default", label:'Last Opened:\n${currentValue}'
         }
         valueTile("batteryRuntime", "device.batteryRuntime", decoration:"flat", inactiveLabel: false, width: 4, height: 1) {
             state "batteryRuntime", label:'Battery Changed:\n ${currentValue}'
         }
 
         main (["button"])
-        details(["button","battery","lastcheckin","batteryRuntime"])
+        details(["button","battery","lastpressed","batteryRuntime"])
    }
 }
 
