@@ -37,11 +37,15 @@ metadata {
 	capability "Health Check"
 
         attribute "lastCheckin", "String"
+	attribute "lastCheckinDate", "String"
+        attribute "maxTemp", "number"
+	attribute "minTemp", "number"
         attribute "batteryRuntime", "String"
 
         fingerprint profileId: "0104", deviceId: "5F01", inClusters: "0000, 0003, FFFF, 0402, 0403, 0405", outClusters: "0000, 0004, FFFF", manufacturer: "LUMI", model: "lumi.weather", deviceJoinName: "Xiaomi Aqara Temp Sensor"
 
         command "resetBatteryRuntime"
+	command "tempReset"
     }
 
     // simulator metadata
@@ -76,7 +80,9 @@ metadata {
 	input description: "Only change the settings below if you know what you're doing", displayDuringSetup: false, type: "paragraph", element: "paragraph", title: "ADVANCED SETTINGS"
 	input name: "voltsmax", title: "Max Volts\nA battery is at 100% at __ volts\nRange 2.8 to 3.4", type: "decimal", range: "2.8..3.4", defaultValue: 3, required: false
 	input name: "voltsmin", title: "Min Volts\nA battery is at 0% (needs replacing) at __ volts\nRange 2.0 to 2.7", type: "decimal", range: "2..2.7", defaultValue: 2.5, required: false
-    	}
+	input description: "Changed your battery? Reset the date", displayDuringSetup: false, type: "paragraph", element: "paragraph", title: "Battery Changed"
+	input name: "battReset", type: "bool", title: "Battery Changed?", description: "", displayDuringSetup: false
+	}
 	}
 
     tiles(scale: 2) {
@@ -137,7 +143,7 @@ metadata {
             state "default", label:'Last Checkin:\n ${currentValue}'
         }
         valueTile("batteryRuntime", "device.batteryRuntime", inactiveLabel: false, decoration:"flat", width: 4, height: 1) {
-            state "batteryRuntime", label:'Battery Changed (tap to reset):\n ${currentValue}', unit:"", action:"resetBatteryRuntime"
+            state "batteryRuntime", label:'Battery Changed:\n ${currentValue}'
         }
 
         main(["temperature2"])
@@ -203,6 +209,12 @@ private Map parseTemperature(String description){
         }
     }
     def units = getTemperatureScale()
+
+    if(temp > maxTemp)
+	sendEvent(name: "maxTemp", value: temp, displayed: false)
+	
+    if(temp < minTemp)
+	sendEvent(name: "minTemp", value: temp, displayed: false)	
 
     def result = [
         name: 'temperature',
@@ -389,6 +401,11 @@ def resetBatteryRuntime() {
     sendEvent(name: "batteryRuntime", value: now)
 }
 
+def tempReset() {
+    sendEvent(name: "maxTemp", value: device.temperature, displayed: false)
+    sendEvent(name: "minTemp", value: device.temperature, displayed: false)
+}
+
 def configure() {
     log.debug "${device.displayName}: configure"
     state.battery = 0
@@ -399,10 +416,18 @@ def configure() {
 def installed() {
     state.battery = 0
     checkIntervalEvent("installed");
+    schedule("60 0 0 * * ?", tempReset) //reset within 60 seconds (this is to not kill ST servers) of midnight 
 }
 
 def updated() {
     checkIntervalEvent("updated");
+	if(battReset){
+		resetBatteryRuntime()
+		device.updateSetting("battReset", false)
+	}
+    //set schedule for people that already had the device installed
+    unschedule()//not sure if need but dont want to make 100s of schedules
+    schedule("60 0 0 * * ?", tempReset) //reset within 60 seconds of midnight 
 }
 
 private checkIntervalEvent(text) {
